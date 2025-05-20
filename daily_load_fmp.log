@@ -1,0 +1,241 @@
+--- Starting daily FMP data load: Tue May 20 14:32:00 MDT 2025 ---
+Running Python script to fetch CSVs...
+Fetching daily stock data...
+Daily stock data saved to /tmp/daily_stock_data.csv
+
+Fetching company profiles...
+Company profiles saved to /tmp/company_profiles.csv
+
+Python script finished.
+Loading daily_stock_data.csv into PostgreSQL...
+-- Create a temporary staging table with a structure matching your CSV file.
+-- Column names here should match your CSV headers.
+CREATE TEMP TABLE fmp_daily_staging (
+    symbol VARCHAR(20),
+    name VARCHAR(255),
+    price NUMERIC(19, 4),
+    changesPercentage NUMERIC(10, 4),
+    change NUMERIC(19, 4),
+    dayLow NUMERIC(19, 4),
+    dayHigh NUMERIC(19, 4),
+    yearHigh NUMERIC(19, 4),
+    yearLow NUMERIC(19, 4),
+    marketCap BIGINT,
+    priceAvg50 NUMERIC(19, 4),
+    priceAvg200 NUMERIC(19, 4),
+    exchange VARCHAR(50),
+    volume BIGINT,
+    avgVolume NUMERIC(20, 4),
+    "open" NUMERIC(19, 4),              -- Assuming CSV header is "open"
+    previousClose NUMERIC(19, 4),
+    eps NUMERIC(12, 4),
+    pe NUMERIC(12, 4),
+    sharesOutstanding BIGINT,
+    "timestamp" BIGINT                  -- Assuming CSV header is "timestamp" (epoch)
+);
+CREATE TABLE
+-- Load data from your daily CSV file into the staging table.
+-- Replace '/path/to/your/daily_fmp_data.csv' with the actual path to your daily CSV file.
+-- This path must be accessible by the PostgreSQL server or use psql's \copy for client-side access.
+COPY fmp_daily_staging (
+    symbol, name, price, changesPercentage, change, dayLow, dayHigh, yearHigh, yearLow,
+    marketCap, priceAvg50, priceAvg200, exchange, volume, avgVolume, "open",
+    previousClose, eps, pe, sharesOutstanding, "timestamp"
+)
+FROM '/tmp/daily_stock_data.csv' -- <--- IMPORTANT: SET YOUR CSV FILE PATH HERE
+WITH (FORMAT CSV, HEADER TRUE, DELIMITER ',');
+COPY 51
+-- Upsert data from the staging table into your main fmp_daily_stock_data table
+INSERT INTO fmp_daily_stock_data (
+    symbol, name, price, changesPercentage, change, dayLow, dayHigh, yearHigh, yearLow,
+    marketCap, priceAvg50, priceAvg200, exchange, volume, avgVolume, open_price,
+    previousClose, eps, pe, sharesOutstanding, quote_timestamp, data_load_date
+)
+SELECT
+    s.symbol,
+    s.name,
+    s.price,
+    s.changesPercentage,
+    s.change,
+    s.dayLow,
+    s.dayHigh,
+    s.yearHigh,
+    s.yearLow,
+    s.marketCap,
+    s.priceAvg50,
+    s.priceAvg200,
+    s.exchange,
+    s.volume,
+    s.avgVolume,
+    s."open",  -- Mapping from staging table's "open" column to main table's open_price
+    s.previousClose,
+    s.eps,
+    s.pe,
+    s.sharesOutstanding,
+    to_timestamp(s."timestamp"), -- Convert epoch "timestamp" to TIMESTAMPTZ for quote_timestamp
+    CURRENT_DATE               -- Set data_load_date for new/updated rows
+FROM fmp_daily_staging s
+ON CONFLICT (symbol, data_load_date) DO UPDATE SET
+    name = EXCLUDED.name,
+    price = EXCLUDED.price,
+    changesPercentage = EXCLUDED.changesPercentage,
+    change = EXCLUDED.change,
+    dayLow = EXCLUDED.dayLow,
+    dayHigh = EXCLUDED.dayHigh,
+    yearHigh = EXCLUDED.yearHigh,
+    yearLow = EXCLUDED.yearLow,
+    marketCap = EXCLUDED.marketCap,
+    priceAvg50 = EXCLUDED.priceAvg50,
+    priceAvg200 = EXCLUDED.priceAvg200,
+    exchange = EXCLUDED.exchange,
+    volume = EXCLUDED.volume,
+    avgVolume = EXCLUDED.avgVolume,
+    open_price = EXCLUDED.open_price,
+    previousClose = EXCLUDED.previousClose,
+    eps = EXCLUDED.eps,
+    pe = EXCLUDED.pe,
+    sharesOutstanding = EXCLUDED.sharesOutstanding,
+    quote_timestamp = EXCLUDED.quote_timestamp,           -- EXCLUDED value is already cast
+    data_load_date = CURRENT_DATE;                        -- Update data_load_date on update
+INSERT 0 51
+-- Clean up by dropping the temporary staging table
+DROP TABLE fmp_daily_staging;
+DROP TABLE
+Loading company_profiles.csv into PostgreSQL...
+-- Step 1: Create a temporary staging table.
+-- Column names match the expected CSV headers (from your JSON keys).
+CREATE TEMP TABLE company_profiles_staging (
+    symbol VARCHAR(20),
+    price TEXT, -- Load numerics as TEXT initially for robust COPY
+    beta TEXT,
+    volAvg TEXT,
+    mktCap TEXT,
+    lastDiv TEXT,
+    range VARCHAR(50),
+    changes TEXT,
+    companyName VARCHAR(255),
+    currency VARCHAR(10),
+    cik VARCHAR(20),
+    isin VARCHAR(20),
+    cusip VARCHAR(20),
+    exchange VARCHAR(100),
+    exchangeShortName VARCHAR(50),
+    industry TEXT,
+    website TEXT,
+    description TEXT,
+    ceo VARCHAR(255),
+    sector VARCHAR(100),
+    country VARCHAR(10),
+    fullTimeEmployees TEXT, -- Load as TEXT, then cast
+    phone VARCHAR(30),
+    address VARCHAR(255),
+    city VARCHAR(100),
+    state VARCHAR(50),
+    zip VARCHAR(20),
+    dcfDiff TEXT,
+    dcf TEXT,
+    image TEXT,
+    ipoDate TEXT, -- Load date as TEXT, then cast
+    defaultImage TEXT, -- Load boolean as TEXT, then cast
+    isEtf TEXT,
+    isActivelyTrading TEXT,
+    isAdr TEXT,
+    isFund TEXT
+);
+CREATE TABLE
+-- Step 2: Load data from CSV into the staging table.
+-- The file '/tmp/company_profiles.csv' must be readable by the PostgreSQL server process.
+COPY company_profiles_staging
+FROM '/tmp/company_profiles.csv'
+WITH (FORMAT CSV, HEADER TRUE, DELIMITER ',');
+COPY 51
+-- Step 3: Upsert data from staging table into the main company_profiles table
+INSERT INTO company_profiles (
+    symbol, price, beta, volAvg, mktCap, lastDiv, range, changes, companyName,
+    currency, cik, isin, cusip, exchange, exchangeShortName, industry, website,
+    description, ceo, sector, country, fullTimeEmployees, phone, address, city,
+    state, zip, dcfDiff, dcf, image, ipoDate, defaultImage, isEtf,
+    isActivelyTrading, isAdr, isFund, data_load_date
+)
+SELECT
+    s.symbol,
+    NULLIF(s.price, '')::NUMERIC(19, 4),
+    NULLIF(s.beta, '')::NUMERIC(12, 6),
+    NULLIF(s.volAvg, '')::NUMERIC(20, 4),
+    NULLIF(s.mktCap, '')::BIGINT,
+    NULLIF(s.lastDiv, '')::NUMERIC(19, 4),
+    s.range,
+    NULLIF(s.changes, '')::NUMERIC(19, 4),
+    s.companyName,
+    s.currency,
+    s.cik,
+    s.isin,
+    s.cusip,
+    s.exchange,
+    s.exchangeShortName,
+    s.industry,
+    s.website,
+    s.description,
+    s.ceo,
+    s.sector,
+    s.country,
+    NULLIF(regexp_replace(s.fullTimeEmployees, '[^0-9]', '', 'g'), '')::BIGINT, -- Removes non-digits then casts
+    s.phone,
+    s.address,
+    s.city,
+    s.state,
+    s.zip,
+    NULLIF(s.dcfDiff, '')::NUMERIC(19, 5),
+    NULLIF(s.dcf, '')::NUMERIC(19, 5),
+    s.image,
+    NULLIF(s.ipoDate, '')::DATE,
+    NULLIF(LOWER(s.defaultImage), '')::BOOLEAN, -- Handle 'true'/'false' strings
+    NULLIF(LOWER(s.isEtf), '')::BOOLEAN,
+    NULLIF(LOWER(s.isActivelyTrading), '')::BOOLEAN,
+    NULLIF(LOWER(s.isAdr), '')::BOOLEAN,
+    NULLIF(LOWER(s.isFund), '')::BOOLEAN,
+    CURRENT_DATE
+FROM company_profiles_staging s
+ON CONFLICT (symbol, data_load_date) DO UPDATE SET
+    price = NULLIF(EXCLUDED.price::TEXT, '')::NUMERIC(19, 4), -- EXCLUDED refers to the values attempted to be inserted
+    beta = NULLIF(EXCLUDED.beta::TEXT, '')::NUMERIC(12, 6),
+    volAvg = NULLIF(EXCLUDED.volAvg::TEXT, '')::NUMERIC(20, 4),
+    mktCap = NULLIF(EXCLUDED.mktCap::TEXT, '')::BIGINT,
+    lastDiv = NULLIF(EXCLUDED.lastDiv::TEXT, '')::NUMERIC(19, 4),
+    range = EXCLUDED.range,
+    changes = NULLIF(EXCLUDED.changes::TEXT, '')::NUMERIC(19, 4),
+    companyName = EXCLUDED.companyName,
+    currency = EXCLUDED.currency,
+    cik = EXCLUDED.cik,
+    isin = EXCLUDED.isin,
+    cusip = EXCLUDED.cusip,
+    exchange = EXCLUDED.exchange,
+    exchangeShortName = EXCLUDED.exchangeShortName,
+    industry = EXCLUDED.industry,
+    website = EXCLUDED.website,
+    description = EXCLUDED.description,
+    ceo = EXCLUDED.ceo,
+    sector = EXCLUDED.sector,
+    country = EXCLUDED.country,
+    fullTimeEmployees = NULLIF(regexp_replace(EXCLUDED.fullTimeEmployees::TEXT, '[^0-9]', '', 'g'), '')::BIGINT,
+    phone = EXCLUDED.phone,
+    address = EXCLUDED.address,
+    city = EXCLUDED.city,
+    state = EXCLUDED.state,
+    zip = EXCLUDED.zip,
+    dcfDiff = NULLIF(EXCLUDED.dcfDiff::TEXT, '')::NUMERIC(19, 5),
+    dcf = NULLIF(EXCLUDED.dcf::TEXT, '')::NUMERIC(19, 5),
+    image = EXCLUDED.image,
+    ipoDate = NULLIF(EXCLUDED.ipoDate::TEXT, '')::DATE,
+    defaultImage = NULLIF(LOWER(EXCLUDED.defaultImage::TEXT), '')::BOOLEAN,
+    isEtf = NULLIF(LOWER(EXCLUDED.isEtf::TEXT), '')::BOOLEAN,
+    isActivelyTrading = NULLIF(LOWER(EXCLUDED.isActivelyTrading::TEXT), '')::BOOLEAN,
+    isAdr = NULLIF(LOWER(EXCLUDED.isAdr::TEXT), '')::BOOLEAN,
+    isFund = NULLIF(LOWER(EXCLUDED.isFund::TEXT), '')::BOOLEAN,
+    data_load_date = CURRENT_DATE;
+INSERT 0 51
+-- Step 4: Clean up the staging table
+DROP TABLE company_profiles_staging;
+DROP TABLE
+--- Daily FMP data load finished: Tue May 20 14:32:02 MDT 2025 ---
+
