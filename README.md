@@ -6,12 +6,12 @@ the Untapped Energy's Microlearning: Data Problem solving pipeline: Data Enginee
 
 ## Requirements:
 
-1. PostgreSQL: Download and install on your system (PC or Mac) from here: https://www.postgresql.org/
-Note: we will use the pdAdmin4 (can be installed by default with the PostgreSQL server) as 
+1. **PostgreSQL:** Download and install on your system (PC or Mac) from here: https://www.postgresql.org/ <br>
+**Note:** we will use the pdAdmin4 (can be installed by default with the PostgreSQL server) as 
 the query editor to write SQL queries.
 
-2. Anaconda: Download and install on your system (PC or Mac) from here: https://www.anaconda.com/
-Note: you can skip registration. 
+2. **Anaconda:** Download and install on your system (PC or Mac) from here: https://www.anaconda.com/ <br>
+**Note:** you can skip registration. 
 It will install the latest Anaconda distribution along with the latest Python. We will use
 Jupyter Notebook to write Python code for data preparation and analysis.
 
