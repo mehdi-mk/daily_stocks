@@ -25,7 +25,7 @@ You will be walked though the required steps to do the hands-on experience and c
 "For the most recent day of data available, what is the average daily trading volume and the
 average market capitalization for companies, grouped by their respective economic sectors?"
 
-**Submit your SQL query or Python file (.py) or Jupyter Notebook (.ipynb) directly to me via email.**
+**Submit your SQL query or Python file (.py) or Jupyter Notebook (.ipynb) directly to me via email. Deadline: Friday, May 23, 2025 at 6:59 PM**
 
 ## Automation:
 
