@@ -3,11 +3,11 @@ import csv
 import os
 import platform
 
-# --- Configuration ---
-API_KEY = "YOUR_FMP_API_KEY" # Replace with your actual FMP API key
+# TODO: Replace with your actual FMP API key
+API_KEY = "YOUR_FMP_API_KEY"
 
 if platform.system() == "Windows":
-	# IMPORTANT NOTE: Ensure this directory exists and PostgreSQL server user has read access
+	# TODO: Ensure this directory exists and PostgreSQL server user has read access
     OUTPUT_DIR = "C:/pgsql_staging/" 
 else: # macOS / Linux
     OUTPUT_DIR = "/tmp/" # Because PostgreSQL server has access to the /tmp/ directory by default.
